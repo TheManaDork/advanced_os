@@ -273,7 +273,7 @@ Done.
 Submit the following files on Submitty:
 
 1. lottery.c
-2. README.txt - Include your test result (when running the run_lottery.sh script) in the README. If your program works correctly and produces the right results, you don't need to include anything else in the README. If your program does not work as expected, you can add some explanation on what works and what does not work and reflect on why your program does not work.
+2. README.txt - Include your test result (when running the run_lottery.sh script) in the README. If your program works correctly and produces the right results, you don't need to include anything else in the README. If your program does not work as expected, you can add some explanation on what works and what does not work and reflect on why your program does not work - such reflection/explanation may help you earn some partial credit.
 
 ## Due Date
 
@@ -300,3 +300,17 @@ Submit the following files on Submitty:
 - Generating random ticket selections in kernel space requires using kernel entropy interfaces rather than standard user-space C library calls. Using get_random_bytes(&rand_ticket, sizeof(rand_ticket)) from <linux/random.h> safely retrieves raw entropy from the kernel CSPRNG without sleeping or blocking atomic contexts. Applying modulo arithmetic bounded to total CPU queue tickets ((rand_ticket % q->total_tickets) + 1) produces a uniform 1-based winning ticket range [1, total_tickets] suitable for traversing runqueues and selecting winner tasks. See the [random number generator example module](examples/random_demo) for a complete demonstration.
 
 - Periodic diagnostic logging in a multi-core scheduler (such as printing queue load snapshots every 10 ticks / ~500ms so as to match with the expected output) requires tracking quantum counts locklessly across concurrent execution contexts. Using a standard `static int` counter introduces data races and cache inconsistency, which can cause lost increments across CPU cores. Instead, use an atomic counter (`static atomic_t tick_counter = ATOMIC_INIT(0);`) and evaluate modulo boundaries via `if (atomic_inc_return(&tick_counter) % 10 == 0)`. The `atomic_inc_return()` macro executes an indivisible, hardware-locked increment and returns the updated value, providing lockless thread safety and immediate cross-core memory visibility. See the [atomic counter demonstration example module](examples/atomic_demo) for a complete demonstration.
+
+## Grading Rubric
+
+50 pts
+ - Required Files (16 pts)
+   - README file is missing. (-8)
+   - README file is provided but complete testing results (when running run_lottery.sh) are missing. (-5)
+   - lottery.c file is missing. (-8)
+   - lottery.c file is provided but is significantly incomplete. (-5)
+ - Correctness (34 pts)
+   - Program fails to compile. (-34)
+   - Program fails to demonstrate the lottery scheduling behavior. (-20)
+   - Program fails to demonstrate the load balancing behavior. (-14)
+   - Program demonstrates both expected behaviors but causes the kernel to crash. (-10)
