@@ -4,12 +4,6 @@
 
 In this demo, we will investigate how Linux allows multiple processes to map the same physical memory page, even though the processes have completely independent virtual address spaces.
 
-We will explore three related concepts:
-
-1. **Different virtual addresses can refer to the same physical page.**
-2. **`MAP_SHARED` allows processes to intentionally share modifications.**
-3. **`MAP_PRIVATE` initially allows sharing, but a write causes Copy-on-Write (COW).**
-
 ---
 
 # 1. Background
@@ -66,63 +60,23 @@ This ability to share physical pages is used extensively by Linux.
 
 ---
 
-# 2. Part 1 — Mapping the Same File in Two Processes
+# 2. Mapping the Same File in Two Processes
 
-First, create a file containing at least one page of data.
-
-```bash
-truncate -s 4096 data.bin
-```
-
-You can put some recognizable content into the file:
+In a folder where we have the [mapfile.c](mapfile.c) source file and [Makefile](Makefile), run:
 
 ```bash
-printf "Hello from the shared file!\n" > data.bin
+make
 ```
 
-Now create a program called `mapfile.c`.
+The `Makefile` automatically:
 
-```c
-#include <stdio.h>
-#include <stdlib.h>
-#include <unistd.h>
-#include <fcntl.h>
-#include <sys/mman.h>
+* Compiles `mapfile.c` into the `mapfile` executable.
+* Creates `data.bin` as a **4096-byte file (one page)**.
+* Places recognizable text at the beginning of `data.bin` so that you can observe its contents when it is mapped.
 
-int main(void)
-{
-    int fd;
-    void *p;
+You do not need to create or compile these files manually.
 
-    fd = open("data.bin", O_RDONLY);
-    if (fd < 0) {
-        perror("open");
-        return 1;
-    }
-    p = mmap(NULL, 4096, PROT_READ, MAP_PRIVATE, fd, 0);
-    if (p == MAP_FAILED) {
-        perror("mmap");
-        close(fd);
-        return 1;
-    }
-    printf("PID: %d\n", getpid());
-    printf("Virtual address: %p\n", p);
-    printf("Contents: %.30s\n", (char *)p);
-    printf("Press ENTER to exit...\n");
-    getchar();
-    munmap(p, 4096);
-    close(fd);
-    return 0;
-}
-```
-
-Compile it:
-
-```bash
-gcc -Wall -Wextra -O0 -o mapfile mapfile.c
-```
-
-Run two copies in separate terminals:
+Now run two copies of the program in separate terminals:
 
 ```bash
 ./mapfile
@@ -134,7 +88,7 @@ and:
 ./mapfile
 ```
 
-You should see something similar to:
+Each process will display its PID, the virtual address at which it mapped the file, and the contents of the mapped page. You should see something similar to:
 
 ```text
 Process A:
@@ -156,6 +110,8 @@ Notice that:
 * the PIDs are different;
 * the virtual addresses are different;
 * both processes see the same file contents.
+
+Keep both programs running. We will use them to investigate how **two processes can map the same file into their virtual address spaces**.
 
 ---
 
