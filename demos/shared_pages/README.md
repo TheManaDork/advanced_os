@@ -220,4 +220,26 @@ This demonstrates that:
 
 > **Two different processes can use different virtual addresses to access the same physical memory page.**
 
-This is an important foundation for understanding shared memory and Copy-on-Write.
+And this raises an important question: If the kernel has deliberately arranged for both processes to use the same physical page, what happens when Process A tries to write to that page? That leads directly to the Copy-on-write (COW) technique:
+
+```text
+             Physical Page Y
+             /             \
+        Process A       Process B
+            |
+          WRITE
+            |
+            v
+       protection fault
+            |
+            v
+        allocate Page Z
+            |
+            v
+        copy Y → Z
+            |
+            v
+
+Process A → Page Z
+Process B → Page Y
+```
