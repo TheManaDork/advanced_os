@@ -6,7 +6,7 @@ In this demo, we will investigate how Linux allows multiple processes to map the
 
 ---
 
-# 1. Background
+## 1. Background
 
 Every process has its own virtual address space.
 
@@ -60,7 +60,7 @@ This ability to share physical pages is used extensively by Linux.
 
 ---
 
-# 2. Mapping the Same File in Two Processes
+## 2. Mapping the Same File in Two Processes
 
 In a folder where we have [mapfile.c](mapfile.c), [check_pfn.c](check_pfn.c) and [Makefile](Makefile), run:
 
@@ -121,7 +121,7 @@ Keep both programs running. We will use them to investigate how **two processes 
 
 ---
 
-# 3. Examine the Process Address Spaces
+## 3. Examine the Process Address Spaces
 
 While both programs are waiting at `getchar()`, open a third terminal, and inspect their memory mappings.
 
@@ -156,7 +156,7 @@ The exact addresses will differ between systems.
 
 ---
 
-# 4. The Important Question
+## 4. The Important Question
 
 At this point we know:
 
@@ -243,3 +243,7 @@ And this raises an important question: If the kernel has deliberately arranged f
 Process A → Page Z
 Process B → Page Y
 ```
+
+## Follow-up Experiment
+
+After completing the above experiment, we can proceed to [pagecache_probe.md](pagecache_probe.md) for a follow-up experiment where we investigate the important concept of page cache.
