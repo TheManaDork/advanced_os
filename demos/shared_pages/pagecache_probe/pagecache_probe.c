@@ -16,18 +16,36 @@ static int entry_handler(struct kretprobe_instance *ri,
                          struct pt_regs *regs)
 {
         struct probe_data *data;
+        struct address_space *mapping;
+        struct inode *inode;
 
         data = (struct probe_data *)ri->data;
 
         /*
-         * filemap_get_entry(struct address_space *mapping, pgoff_t index)
+         * filemap_get_entry(mapping, index)
          *
-         * x86-64 calling convention:
+         * x86-64:
          *   RDI = mapping
          *   RSI = index
          */
-        data->mapping = (struct address_space *)regs->di;
+        mapping = (struct address_space *)regs->di;
+        data->mapping = mapping;
         data->index = regs->si;
+
+        /*
+         * Temporarily report what mapfile is actually looking up.
+         */
+        if (strncmp(current->comm, "mapfile", TASK_COMM_LEN) == 0) {
+                if (mapping && mapping->host) {
+                        inode = mapping->host;
+
+                        pr_info("PA-LAB: ENTRY pid=%d index=%lu inode=%lu mapping=%px\n",
+                                current->pid,
+                                data->index,
+                                inode->i_ino,
+                                mapping);
+                }
+        }
 
         return 0;
 }
@@ -36,39 +54,23 @@ static int ret_handler(struct kretprobe_instance *ri,
                        struct pt_regs *regs)
 {
         struct probe_data *data;
-        struct address_space *mapping;
-        struct inode *inode;
         struct folio *folio;
 
         data = (struct probe_data *)ri->data;
 
-        mapping = data->mapping;
-
-        if (!mapping)
-                return 0;
-
-        inode = mapping->host;
-
-        if (!inode)
-                return 0;
-
         /*
-         * Only observe data.bin.
+         * Only report mapfile.
          */
-        if (inode->i_ino != DATA_INODE)
+        if (strncmp(current->comm, "mapfile", TASK_COMM_LEN) != 0)
                 return 0;
 
-        /*
-         * x86-64 return value:
-         *   RAX = return value
-         */
         folio = (struct folio *)regs->ax;
 
         if (folio) {
-                pr_info("PA-LAB: PAGE CACHE HIT pid=%d index=%lu\n",
+                pr_info("PA-LAB: RETURN HIT pid=%d index=%lu\n",
                         current->pid, data->index);
         } else {
-                pr_info("PA-LAB: PAGE CACHE MISS pid=%d index=%lu\n",
+                pr_info("PA-LAB: RETURN MISS pid=%d index=%lu\n",
                         current->pid, data->index);
         }
 
