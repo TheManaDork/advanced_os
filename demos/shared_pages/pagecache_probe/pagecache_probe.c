@@ -17,23 +17,28 @@ static int ret_handler(struct kretprobe_instance *ri,
         unsigned long index;
 
         /*
-         * filemap_get_entry(mapping, index)
-         *
-         * On x86-64, the second argument is in RSI.
+         * Only observe our page-cache demonstration program.
          */
-        index = regs->si;
+        if (strncmp(current->comm, "mapfile", TASK_COMM_LEN) != 0)
+                return 0;
 
         /*
-         * kretprobe return value on x86-64 is in RAX.
+         * filemap_get_entry(mapping, index)
+         *
+         * x86-64:
+         *   RDI = mapping
+         *   RSI = index
+         *   RAX = return value
          */
+        index = regs->si;
         folio = (struct folio *)regs->ax;
 
         if (folio) {
-                pr_info("PA-LAB: PAGE CACHE HIT pid=%d comm=%s index=%lu folio=%px\n",
-                        current->pid, current->comm, index, folio);
+		pr_info("PA-LAB: PAGE CACHE HIT pid=%d index=%lu\n",
+                current->pid, index);
         } else {
-                pr_info("PA-LAB: PAGE CACHE MISS pid=%d comm=%s index=%lu\n",
-                        current->pid, current->comm, index);
+		pr_info("PA-LAB: PAGE CACHE MISS pid=%d index=%lu\n",
+                current->pid, index);
         }
 
         return 0;
