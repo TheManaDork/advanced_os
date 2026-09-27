@@ -62,7 +62,7 @@ This ability to share physical pages is used extensively by Linux.
 
 # 2. Mapping the Same File in Two Processes
 
-In a folder where we have the [mapfile.c](mapfile.c), [check_pfn.c](check_pfn.c) and [Makefile](Makefile), run:
+In a folder where we have [mapfile.c](mapfile.c), [check_pfn.c](check_pfn.c) and [Makefile](Makefile), run:
 
 ```bash
 make
@@ -95,8 +95,8 @@ Each process will display its PID, the virtual address at which it mapped the fi
 Process A:
 
 test@test-vm:~/advanced_os/demos/shared_pages$ ./mapfile
-PID: 3291
-Virtual address: 0x75df5adb1000
+PID: 3446
+Virtual address: 0x7b88e944d000
 Contents: Hello from the shared file!
 
 Press ENTER to exit...
@@ -104,8 +104,8 @@ Press ENTER to exit...
 Process B:
 
 test@test-vm:~/advanced_os/demos/shared_pages$ ./mapfile
-PID: 3292
-Virtual address: 0x7794fb201000
+PID: 3447
+Virtual address: 0x737fc3c90000
 Contents: Hello from the shared file!
 
 Press ENTER to exit...
@@ -125,17 +125,17 @@ Keep both programs running. We will use them to investigate how **two processes 
 
 While both programs are waiting at `getchar()`, open a third terminal, and inspect their memory mappings.
 
-For example: (remember to replace 3291 with the PID of process A, and replace 3292 with the PID of process B.
+For example: (remember to replace 3446 with the PID of process A, and replace 3447 with the PID of process B.)
 
 ```bash
-cat /proc/3291/maps
+cat /proc/3446/maps
 ```
 
 
 and:
 
 ```bash
-cat /proc/3292/maps
+cat /proc/3447/maps
 ```
 
 Find the mapping corresponding to `data.bin`.
@@ -143,13 +143,13 @@ Find the mapping corresponding to `data.bin`.
 You should see something resembling:
 
 ```text
-75df5adb1000-75df5adb2000 r--p 00000000 08:01 1502844                    /home/test/advanced_os/demos/shared_pages/data.bin
+7b88e944d000-7b88e944e000 r--p 00000000 08:01 1502784                    /home/test/advanced_os/demos/shared_pages/data.bin
 ```
 
 and in the other process:
 
 ```text
-7794fb201000-7794fb202000 r--p 00000000 08:01 1502844                    /home/test/advanced_os/demos/shared_pages/data.bin
+737fc3c90000-737fc3c91000 r--p 00000000 08:01 1502784                    /home/test/advanced_os/demos/shared_pages/data.bin
 ```
 
 The exact addresses will differ between systems.
@@ -194,41 +194,27 @@ Let's prove it. How can we determine whether those virtual addresses actually re
 /proc/<pid>/pagemap
 ```
 
-Each virtual page has a corresponding entry in this file. The physical page is identified by a **Page Frame Number (PFN)**. In Step 2, the Makefile compiled the provided check_pfn.c source file into the check_pfn executable. We will now use that program to inspect the physical page corresponding to each virtual address printed by the two mapfile processes. To verify whether the two virtual addresses are mapped to the same physical page frame, we will run check_pfn once for each of the two mapfile processes and compare their PFNs.
-
-For example:
-
-```bash
-sudo ./check_pfn 3291 0x75df5adb1000
-```
-
-and:
-
-```bash
-sudo ./check_pfn 3292 0x7794fb201000
-```
-
-Replace the PID and virtual address in these commands with the PID and virtual address reported by the mapfile program. The two commands should use the corresponding PID/address pair from each of the two running mapfile processes.
-
-The program will report the PFN:
+Each virtual page has a corresponding entry in this file. By parsing the corresponding entry for a virtual address, we can determine the physical page to which that virtual address is mapped. We will now use the program check_pfn, which was generated in Step 2 by the make command, to find the physical page corresponding to virtual address A and virtual address B. The program takes the PID and the virtual address as its command-line arguments. We open a third terminal and run the program like this:
 
 ```text
-PID:              3291
-Virtual address:  0x7f1234567000
-PFN:              123456
-Physical address: 0x1e240000
+test@test-vm:~/advanced_os/demos/shared_pages$ sudo ./check_pfn 3446 0x7b88e944d000
+PID:             3446
+Virtual address: 0x7b88e944d000
+PFN:             1670512
+Physical address: 0x197d70000
 ```
 
 and:
 
 ```text
-PID:              3292
-Virtual address:  0x7f9876543000
-PFN:              123456
-Physical address: 0x1e240000
+test@test-vm:~/advanced_os/demos/shared_pages$ sudo ./check_pfn 3447 0x737fc3c90000
+PID:             3447
+Virtual address: 0x737fc3c90000
+PFN:             1670512
+Physical address: 0x197d70000
 ```
 
-Notice that the **virtual addresses are different**, but the **PFNs are the same**.
+Notice that the virtual addresses are different, but the physical addresses are the same. The PFNs are also the same, confirming that both virtual addresses map to the same physical page frame.
 
 This demonstrates that:
 
