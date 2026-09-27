@@ -174,27 +174,35 @@ Second process -> PAGE CACHE HIT
 
 ## 7. Repeat the Experiment
 
-To repeat the experiment from a clean state:
+To repeat the experiment from a clean state, first stop any existing `mapfile` processes.
 
-### 1. Clear the page cache (Terminal 1)
+### 1. Stop existing `mapfile` processes
+
+In Terminals 2 and 3, press:
+
+```text
+Ctrl+C
+```
+
+### 2. Clear the page cache (Terminal 1)
 
 ```bash
 sudo sh -c 'echo 1 > /proc/sys/vm/drop_caches'
 ```
 
-### 2. Run the first process (Terminal 2)
+### 3. Run the first process (Terminal 2)
 
 ```bash
 ./mapfile
 ```
 
-### 3. Run the second process (Terminal 3)
+### 4. Run the second process (Terminal 3)
 
 ```bash
 ./mapfile
 ```
 
-### 4. Check the results (Terminal 1)
+### 5. Check the results (Terminal 1)
 
 ```bash
 sudo dmesg | grep PAGECACHE
