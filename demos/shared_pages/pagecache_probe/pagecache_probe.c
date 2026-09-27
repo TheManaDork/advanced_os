@@ -2,21 +2,22 @@
 #include <linux/kernel.h>
 #include <linux/kprobes.h>
 #include <linux/pagemap.h>
+#include <linux/fs.h>
 #include <linux/sched.h>
+
+#define DATA_INODE 1502784
+
+struct probe_data {
+        struct address_space *mapping;
+        unsigned long index;
+};
 
 static int entry_handler(struct kretprobe_instance *ri,
                          struct pt_regs *regs)
 {
-        return 0;
-}
+        struct probe_data *data;
 
-static int ret_handler(struct kretprobe_instance *ri,
-                       struct pt_regs *regs)
-{
-        struct address_space *mapping;
-        struct inode *inode;
-        struct folio *folio;
-        unsigned long index;
+        data = (struct probe_data *)ri->data;
 
         /*
          * filemap_get_entry(struct address_space *mapping, pgoff_t index)
@@ -24,38 +25,60 @@ static int ret_handler(struct kretprobe_instance *ri,
          * x86-64 calling convention:
          *   RDI = mapping
          *   RSI = index
-         *   RAX = return value
          */
-        mapping = (struct address_space *)regs->di;
-        index = regs->si;
-        folio = (struct folio *)regs->ax;
+        data->mapping = (struct address_space *)regs->di;
+        data->index = regs->si;
+
+        return 0;
+}
+
+static int ret_handler(struct kretprobe_instance *ri,
+                       struct pt_regs *regs)
+{
+        struct probe_data *data;
+        struct address_space *mapping;
+        struct inode *inode;
+        struct folio *folio;
+
+        data = (struct probe_data *)ri->data;
+
+        mapping = data->mapping;
+
         if (!mapping)
                 return 0;
+
         inode = mapping->host;
+
         if (!inode)
                 return 0;
 
         /*
          * Only observe data.bin.
-         *
-         * data.bin currently has inode 1502784.
          */
-        if (inode->i_ino != 1502784)
+        if (inode->i_ino != DATA_INODE)
                 return 0;
+
+        /*
+         * x86-64 return value:
+         *   RAX = return value
+         */
+        folio = (struct folio *)regs->ax;
 
         if (folio) {
                 pr_info("PA-LAB: PAGE CACHE HIT pid=%d index=%lu\n",
-                        current->pid, index);
+                        current->pid, data->index);
         } else {
                 pr_info("PA-LAB: PAGE CACHE MISS pid=%d index=%lu\n",
-                        current->pid, index);
+                        current->pid, data->index);
         }
+
         return 0;
 }
 
 static struct kretprobe kp = {
         .handler = ret_handler,
         .entry_handler = entry_handler,
+        .data_size = sizeof(struct probe_data),
         .maxactive = 64,
         .kp.symbol_name = "filemap_get_entry",
 };
