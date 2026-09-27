@@ -13,34 +13,43 @@ static int entry_handler(struct kretprobe_instance *ri,
 static int ret_handler(struct kretprobe_instance *ri,
                        struct pt_regs *regs)
 {
+        struct address_space *mapping;
+        struct inode *inode;
         struct folio *folio;
         unsigned long index;
 
         /*
-         * Only observe our page-cache demonstration program.
-         */
-        if (strncmp(current->comm, "mapfile", TASK_COMM_LEN) != 0)
-                return 0;
-
-        /*
-         * filemap_get_entry(mapping, index)
+         * filemap_get_entry(struct address_space *mapping, pgoff_t index)
          *
-         * x86-64:
+         * x86-64 calling convention:
          *   RDI = mapping
          *   RSI = index
          *   RAX = return value
          */
+        mapping = (struct address_space *)regs->di;
         index = regs->si;
         folio = (struct folio *)regs->ax;
+        if (!mapping)
+                return 0;
+        inode = mapping->host;
+        if (!inode)
+                return 0;
+
+        /*
+         * Only observe data.bin.
+         *
+         * data.bin currently has inode 1502784.
+         */
+        if (inode->i_ino != 1502784)
+                return 0;
 
         if (folio) {
-		pr_info("PA-LAB: PAGE CACHE HIT pid=%d index=%lu\n",
-                current->pid, index);
+                pr_info("PA-LAB: PAGE CACHE HIT pid=%d index=%lu\n",
+                        current->pid, index);
         } else {
-		pr_info("PA-LAB: PAGE CACHE MISS pid=%d index=%lu\n",
-                current->pid, index);
+                pr_info("PA-LAB: PAGE CACHE MISS pid=%d index=%lu\n",
+                        current->pid, index);
         }
-
         return 0;
 }
 
