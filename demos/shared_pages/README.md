@@ -77,7 +77,7 @@ The `Makefile` automatically:
 
 You do not need to create or compile these files manually.
 
-Now run two copies of the program in separate terminals:
+The `mapfile` program opens `data.bin` and maps the file into the process's virtual address space using `mmap()` with `MAP_PRIVATE`. It then prints the process ID, the virtual address of the mapping, and the contents of the mapped page. Now run two copies of the program in separate terminals:
 
 ```bash
 ./mapfile
