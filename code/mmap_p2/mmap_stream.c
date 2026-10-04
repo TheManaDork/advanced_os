@@ -4,6 +4,10 @@
  * Process a large file one chunk at a time and observe the
  * process's resident memory (RSS).
  *
+ * To create a large file:
+ *
+ * dd if=/dev/zero of=large_file bs=1M count=500
+ *
  * Usage:
  *
  *     ./mmap_stream <file> <use_madvise>
