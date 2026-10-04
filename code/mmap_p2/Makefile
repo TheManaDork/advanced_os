@@ -1,7 +1,7 @@
 CC = gcc
 CFLAGS = -Wall -Wextra -O2
 
-PROGRAMS = open_rd open_rw mmap_rd mmap_shared_rw mmap_private_rw mmap_private_madvise
+PROGRAMS = open_rd open_rw mmap_rd mmap_shared_rw mmap_private_rw mmap_private_madvise mmap_stream dirty_cow
 
 all: $(PROGRAMS)
 
@@ -22,6 +22,12 @@ mmap_private_rw: mmap_private_rw.c
 
 mmap_private_madvise: mmap_private_madvise.c
 	$(CC) $(CFLAGS) -o $@ $<
+
+mmap_stream: mmap_stream.c
+	$(CC) $(CFLAGS) -o $@ $<
+
+dirty_cow: dirty_cow.c
+	$(CC) $(CFLAGS) -pthread -o $@ $<
 
 clean:
 	rm -f $(PROGRAMS)
