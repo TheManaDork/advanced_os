@@ -1,5 +1,8 @@
-// to create the large file:
-// base64 /dev/urandom | head -c 200M > large_file.txt
+// To create the large file:
+// $ base64 /dev/urandom | head -c 200M > large_file.txt
+// Make sure to clear page cache before we run the program:
+// $ sudo sh -c 'echo 1 > /proc/sys/vm/drop_caches'
+// $ ./read-large large_file.txt
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -40,7 +43,6 @@ int main(int argc, char *argv[]) {
     FILE *out = fopen("/dev/null", "wb");
     fwrite(data, 1, filesize, out);
     fclose(out);
-
     munmap(data, filesize);
     close(fd);
 
