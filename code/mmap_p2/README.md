@@ -1,172 +1,99 @@
 # Memory Mapping Examples
 
-These programs demonstrate how file access permissions interact with
-`open()`, `mmap()`, `MAP_SHARED`, `MAP_PRIVATE`, copy-on-write (COW),
-and `madvise()`.
+These programs demonstrate Linux process memory, `mmap()`, page cache,
+copy-on-write, and related concepts.
 
-Compile all programs with:
+## Programs
 
-```bash
-make
-```
+### Basic file I/O
 
-The programs should be run in the following order.
+- `open_rd` - Open a file for reading.
+- `open_rw` - Open a file for reading and writing.
 
-## 1. `open_rd.c`
+### Basic `mmap()`
 
-```bash
-./open_rd
-```
+- `mmap_rd` - Map a file into memory for reading.
+- `mmap_example` - Basic `MAP_SHARED` example. Modifications to the
+  mapping are reflected in the underlying file.
 
-**Expected: Succeeds**
+### `MAP_SHARED` and `MAP_PRIVATE`
 
-The program opens `/etc/passwd` for reading only.
+- `mmap_shared_rw` - Demonstrates a writable `MAP_SHARED` mapping.
+  The underlying file must be opened with write permission.
 
-This demonstrates that the process is allowed to open the file when it
-only requests read access.
+- `mmap_private_rw` - Demonstrates a writable `MAP_PRIVATE` mapping.
+  Writes use copy-on-write (COW), so the underlying file is not modified.
 
----
+### Lazy memory allocation and page residency
 
-## 2. `open_rw.c`
+- `mmap_lazy` - Maps a 256 MB file with `mmap()` and compares RSS
+  before and after accessing a byte. Demonstrates that `mmap()` does
+  not immediately load the entire file into physical memory.
 
-```bash
-./open_rw
-```
+- `read_into_buffer` - Allocates a 256 MB buffer and reads the entire
+  file into it. Comparing its RSS with `mmap_lazy` demonstrates the
+  difference between a virtual mapping and actually making the file
+  contents resident in memory.
 
-**Expected: Fails**
+- `mmap_stream` - Maps a large file and accesses it in chunks while
+  measuring RSS. Demonstrates that pages become resident as they are
+  accessed. Also demonstrates `madvise(MADV_DONTNEED)` to allow
+  resident pages to be discarded.
 
-The program attempts to open `/etc/passwd` for both reading and writing.
+### Copy-on-write and security
 
-The process does not have permission to open this file for writing, so
-the `open()` operation fails.
+- `mmap_private_madvise` - Demonstrates `MAP_PRIVATE`, copy-on-write,
+  and `madvise()`.
 
----
+- `dirty_cow` - Historical Dirty COW demonstration. Shows how a
+  kernel vulnerability could violate the copy-on-write protection of
+  a private file mapping. This example is intended for use in an
+  isolated teaching environment and does not work on patched kernels.
 
-## 3. `mmap_rd.c`
+## Building
 
-```bash
-./mmap_rd
-```
+Build all programs:
 
-**Expected: Succeeds**
+    make
 
-The program opens `/etc/passwd` for reading and creates a private,
-read-only memory mapping.
+Build a specific program:
 
-The process can read the contents of the file through the memory
-mapping.
+    make mmap_lazy
 
----
+Clean compiled programs:
 
-## 4. `mmap_shared_rw.c`
+    make clean
 
-```bash
-./mmap_shared_rw
-```
+## Lazy `mmap()` demonstration
 
-**Expected: Fails**
+The `mmap_lazy` and `read_into_buffer` programs are intended to be
+run together to compare two approaches to accessing a large file.
 
-The program attempts to create a shared, read/write memory mapping of
-`/etc/passwd`.
+First create a 256 MB test file:
 
-A shared writable mapping would allow writes through the mapping to
-modify the underlying file. Therefore, the file descriptor must have
-write permission.
+    dd if=/dev/zero of=large_file.bin bs=1M count=256
 
-Because `/etc/passwd` was opened for reading only, `mmap()` fails.
+Run:
 
-Importantly, the program does not even need to perform a write.
-Requesting write permission for the shared mapping is enough for
-`mmap()` to fail.
+    ./mmap_lazy
 
----
+The program maps the entire 256 MB file, but its RSS remains small
+because the file is not loaded into memory all at once.
 
-## 5. `mmap_private_rw.c`
+Then run:
 
-```bash
-./mmap_private_rw
-```
+    ./read_into_buffer
 
-**Expected: Succeeds**
+This program reads the entire 256 MB file into a memory buffer.
+Its RSS should increase by approximately 256 MB.
 
-The program creates a private, read/write memory mapping of
-`/etc/passwd`, even though the file was opened for reading only.
+The exact RSS values depend on the Linux kernel and system state.
 
-This is allowed because `MAP_PRIVATE` means that writes through the
-mapping do not modify the underlying file.
+## Notes
 
-When the process writes to the mapping, copy-on-write (COW) creates a
-private copy of the affected page. The process can then modify this
-private copy.
+RSS (Resident Set Size) is the amount of memory belonging to the
+process that is currently resident in physical memory.
 
-After running the program, examine the actual `/etc/passwd` file.
-The file contents will remain unchanged.
-
-This demonstrates the important distinction between a writable private
-mapping and a writable shared mapping.
-
----
-
-## 6. `mmap_private_madvise.c`
-
-```bash
-./mmap_private_madvise
-```
-
-**Expected: Succeeds**
-
-This program extends the previous example.
-
-It first creates a writable private mapping and modifies the mapping.
-The write creates a private COW copy of the affected page.
-
-The program then uses `madvise()` with `MADV_DONTNEED` to tell the
-kernel that the pages in the mapping are no longer needed.
-
-The private modified page can then be discarded. When the program
-accesses the mapping again, the original file-backed contents appear
-again.
-
-The important sequence is:
-
-1. Create a writable private mapping.
-2. Write to the mapping.
-3. A private COW copy is created.
-4. The private copy contains the modification.
-5. Use `MADV_DONTNEED`.
-6. The private copy can be discarded.
-7. The original file-backed contents are seen again.
-
-The actual `/etc/passwd` file is never modified.
-
----
-
-## Summary
-
-The examples demonstrate the following progression:
-
-| Program | Operation | Expected |
-|---|---|---|
-| `open_rd.c` | Open `/etc/passwd` for reading | Succeeds |
-| `open_rw.c` | Open `/etc/passwd` for reading and writing | Fails |
-| `mmap_rd.c` | Read-only private mapping | Succeeds |
-| `mmap_shared_rw.c` | Read/write shared mapping of a read-only file | Fails |
-| `mmap_private_rw.c` | Read/write private mapping of a read-only file | Succeeds |
-| `mmap_private_madvise.c` | Writable private mapping followed by `MADV_DONTNEED` | Succeeds |
-
-The key distinction is:
-
-**`MAP_SHARED` + write permission**
-
-A write through the mapping can modify the underlying file, so the file
-must be writable.
-
-**`MAP_PRIVATE` + write permission**
-
-A write through the mapping modifies a private COW copy instead of the
-underlying file, so a read-only file can still be mapped with write
-permission.
-
-The final example shows that the private COW copy can subsequently be
-discarded with `MADV_DONTNEED`, allowing the original file-backed
-contents to appear again.
+A large virtual memory mapping does not imply that the corresponding
+physical pages are all resident. With a file-backed `mmap()`, pages
+are generally brought into memory when they are accessed.
