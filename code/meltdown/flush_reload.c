@@ -97,7 +97,7 @@ void shuffle(int *order)
  */
 void reloadSideChannel()
 {
-    int junk = 0;
+    unsigned int junk = 0;
     uint64_t time1;
     uint64_t time2;
     volatile uint8_t *addr;
@@ -143,7 +143,7 @@ void reloadSideChannel()
 }
 
 
-int main(int argc, const char **argv)
+int main(void)
 {
     /*
      * Use a different random reload order each execution.

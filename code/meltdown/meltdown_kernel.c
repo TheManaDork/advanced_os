@@ -2,59 +2,103 @@
 #include <linux/kernel.h>
 #include <linux/init.h>
 #include <linux/vmalloc.h>
-#include <linux/version.h>
 #include <linux/proc_fs.h>
 #include <linux/seq_file.h>
 #include <linux/uaccess.h>
 
 static char secret[8] = {'S','E','E','D','L','a','b','s'};
 static struct proc_dir_entry *secret_entry;
-static char* secret_buffer;
+static char *secret_buffer;
+
 
 static int test_proc_open(struct inode *inode, struct file *file)
 {
-#if LINUX_VERSION_CODE <= KERNEL_VERSION(4,0,0)
-   return single_open(file, NULL, PDE(inode)->data);
-#else
-   return single_open(file, NULL, PDE_DATA(inode));
-#endif
+    return single_open(file, NULL, pde_data(inode));
 }
 
-static ssize_t read_proc(struct file *filp, char *buffer, 
-                         size_t length, loff_t *offset)
+
+static ssize_t read_proc(struct file *filp,
+                         char __user *buffer,
+                         size_t length,
+                         loff_t *offset)
 {
-   memcpy(secret_buffer, &secret, 8);              
-   return 8;
+    /*
+     * Copy the secret into the kernel buffer.
+     *
+     * This preserves the original lab structure, where the
+     * secret is copied into secret_buffer before being returned.
+     */
+    memcpy(secret_buffer, secret, 8);
+
+    /*
+     * Return the data to user space.
+     */
+    if (*offset >= 8)
+        return 0;
+
+    if (length > 8 - *offset)
+        length = 8 - *offset;
+
+    if (copy_to_user(buffer, secret_buffer + *offset, length))
+        return -EFAULT;
+
+    *offset += length;
+
+    return length;
 }
 
-static const struct file_operations test_proc_fops =
+
+static const struct proc_ops test_proc_fops =
 {
-   .owner = THIS_MODULE,
-   .open = test_proc_open,
-   .read = read_proc,
-   .llseek = seq_lseek,
-   .release = single_release,
+    .proc_open    = test_proc_open,
+    .proc_read    = read_proc,
+    .proc_lseek   = seq_lseek,
+    .proc_release = single_release,
 };
 
-static __init int test_proc_init(void)
+
+static int __init test_proc_init(void)
 {
-   // write message in kernel message buffer
-   printk("secret data address:%p\n", &secret);      
+    /*
+     * Print the kernel virtual address of the secret.
+     */
+    printk(KERN_INFO "secret data address:%px\n", &secret);
 
-   secret_buffer = (char*)vmalloc(8);
+    secret_buffer = vmalloc(8);
 
-   // create data entry in /proc
-   secret_entry = proc_create_data("secret_data", 
-                  0444, NULL, &test_proc_fops, NULL);
-   if (secret_entry) return 0;
+    if (!secret_buffer)
+        return -ENOMEM;
 
-   return -ENOMEM;
+    /*
+     * Create:
+     *
+     *     /proc/secret_data
+     */
+    secret_entry = proc_create_data("secret_data",
+                                    0444,
+                                    NULL,
+                                    &test_proc_fops,
+                                    NULL);
+
+    if (secret_entry)
+        return 0;
+
+    vfree(secret_buffer);
+
+    return -ENOMEM;
 }
 
-static __exit void test_proc_cleanup(void)
+
+static void __exit test_proc_cleanup(void)
 {
-   remove_proc_entry("secret_data", NULL);
+    remove_proc_entry("secret_data", NULL);
+
+    vfree(secret_buffer);
 }
+
 
 module_init(test_proc_init);
 module_exit(test_proc_cleanup);
+
+MODULE_LICENSE("GPL");
+MODULE_DESCRIPTION("Kernel module for the Meltdown side-channel demonstration");
