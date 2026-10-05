@@ -21,6 +21,13 @@
  *
  * The receiver later uses mincore() to determine which
  * pages are resident in the page cache.
+ *
+ * Clear the page cache before we run the attack.
+ * $ sudo sh -c 'echo 1 > /proc/sys/vm/drop_caches'
+ * $ gcc -Wall -Wextra -O2 -o sender sender.c
+ * $ gcc -Wall -Wextra -O2 -o receiver receiver.c
+ * $ ./sender 10110100
+ * $ ./receiver
  */
 
 #include <stdio.h>
