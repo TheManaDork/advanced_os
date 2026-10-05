@@ -6,12 +6,16 @@ obj-m += meltdown_kernel.o
 KDIR := /lib/modules/$(shell uname -r)/build
 PWD  := $(shell pwd)
 
-USER_PROGRAMS = cache_time flush_reload page_cache_mincore sender receiver
+USER_PROGRAMS = cache_time flush_reload page_cache_mincore \
+                sender receiver victim_secret monitor_secret
 
 CHANNEL_FILES = bit0.bin bit1.bin bit2.bin bit3.bin \
                 bit4.bin bit5.bin bit6.bin bit7.bin
 
-all: $(USER_PROGRAMS) channel_files kernel
+PAGE_CACHE_FILE = lookup_table.bin
+
+all: $(USER_PROGRAMS) channel_files page_cache_file kernel
+
 
 cache_time: cache_time.c
 	$(CC) $(CFLAGS) -o $@ $<
@@ -28,16 +32,30 @@ sender: sender.c
 receiver: receiver.c
 	$(CC) $(CFLAGS) -o $@ $<
 
+victim_secret: victim_secret.c
+	$(CC) $(CFLAGS) -o $@ $<
+
+monitor_secret: monitor_secret.c
+	$(CC) $(CFLAGS) -o $@ $<
+
+
 channel_files:
 	for i in 0 1 2 3 4 5 6 7; do \
 		dd if=/dev/zero of=bit$$i.bin bs=4096 count=1 status=none; \
 	done
 
+
+page_cache_file:
+	dd if=/dev/zero of=$(PAGE_CACHE_FILE) bs=4096 count=2049 status=none
+
+
 kernel:
 	$(MAKE) -C $(KDIR) M=$(PWD) modules
 
+
 clean:
-	rm -f $(USER_PROGRAMS) $(CHANNEL_FILES)
+	rm -f $(USER_PROGRAMS) $(CHANNEL_FILES) $(PAGE_CACHE_FILE)
 	$(MAKE) -C $(KDIR) M=$(PWD) clean
 
-.PHONY: all kernel clean channel_files
+
+.PHONY: all kernel clean channel_files page_cache_file
