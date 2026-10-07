@@ -1,8 +1,8 @@
 # Module name
-obj-m += reboot_monitor.o
+obj-m += reboot_guard.o
 
 # Target user-space application
-USER_APP := reboot_test
+USER_APP := reboot_auth
 
 # Path to kernel build directory
 KDIR ?= /lib/modules/$(shell uname -r)/build
@@ -12,7 +12,7 @@ all: $(USER_APP)
 	make -C $(KDIR) M=$(PWD) modules
 
 # Rule to compile the user-space application
-$(USER_APP): reboot_test.c
+$(USER_APP): reboot_auth.c
 	$(CC) -Wall -O2 $< -o $@
 
 # Clean target: cleans kernel module artifacts and user-space binary

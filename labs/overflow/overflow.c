@@ -32,10 +32,16 @@
 #include <string.h>
 
 int your_fcn(void) {
-        char buf[5];
+        char buf[57];
+        //+14 = 0x0000005555555552        
+        // printf("%16x\n", (buf+57+18));
+        // printf("\x55\x55\x55\x55\x52\x21\n");
+        strcpy(buf+57+15, "\x2b\x52\x55\x55\x55\x55");
+        // strcpy(buf+57+15, "\x55\x55\x55\x55\x52\x39");
 
-        strcpy(buf, "aaaa");
-
+        printf("buf loc = \"%p\"\n", buf);
+        printf("buf = \"%s\"\n", buf);
+        // printf("func loc = \"%p\"\n", your_fcn);
         return 0;
 }
 
@@ -47,7 +53,8 @@ int your_fcn(void) {
 int main(void) {
         int mine = 0;
         int yours = 0;
-        yours = your_fcn();
+        yours = your_fcn(); 
+
         mine = yours + 1;
         if (mine > yours)
                 printf("You lost!\n");
