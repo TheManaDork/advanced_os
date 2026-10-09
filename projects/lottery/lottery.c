@@ -49,6 +49,7 @@ static struct pid *pid_struct;
 static struct task_struct *task;
 
 static int monitor_pid = -1;
+static bool lottery_stopping;
 
 MODULE_LICENSE("GPL");
 MODULE_DESCRIPTION("Lottery kernel module");
@@ -181,6 +182,9 @@ static struct work_struct lottery_work;
 static ktime_t kt_interval;
 
 static enum hrtimer_restart lottery_timer_tick(struct hrtimer *timer) {
+	if (READ_ONCE(lottery_stopping)) {
+  	return HRTIMER_NORESTART;
+  }
 	schedule_work(&lottery_work);
 	hrtimer_forward_now(timer, kt_interval);
 	return HRTIMER_RESTART;
@@ -188,6 +192,9 @@ static enum hrtimer_restart lottery_timer_tick(struct hrtimer *timer) {
 
 
 static void lottery_monitor(struct work_struct *work) {
+	if (READ_ONCE(lottery_stopping)) {
+  	return;
+  }
 	pr_info("[LOTTERY_STATUS] running lottery. Weights are %d, %d\n", weight1, weight2);
 
 	unsigned long rand_ticket;
@@ -204,7 +211,7 @@ static void lottery_monitor(struct work_struct *work) {
 			if(rand_ticket <= cpu1[i].tickets) {
 				pr_info("winner picked. rand_ticket %ld", rand_ticket);
 				pid = cpu1[i].pid;
-				if(!currentProccess1) old_pid = currentProccess1->pid;
+				if(currentProccess1 != NULL) old_pid = currentProccess1->pid;
 				 currentProccess1 = &cpu1[i];
 				break;
 			} else {
@@ -219,8 +226,8 @@ static void lottery_monitor(struct work_struct *work) {
 			return; 
 		}
 		task = get_pid_task(pid_struct, PIDTYPE_PID);
-		if(!task) { pr_err("[LOTTERY_STATUS] Error: failed to find task"); return; }
 		put_pid(pid_struct);
+		if(!task) { pr_err("[LOTTERY_STATUS] Error: failed to find task"); return; }
 		send_sig_info(SIGCONT, SEND_SIG_PRIV, task);
 		put_task_struct(task);
 
@@ -232,8 +239,8 @@ static void lottery_monitor(struct work_struct *work) {
 			return;
 		}
 		task = get_pid_task(pid_struct, PIDTYPE_PID);
-		if(!task) { pr_err("[LOTTERY_STATUS] Error: failed to find task"); return; }
 		put_pid(pid_struct);
+		if(!task) { pr_err("[LOTTERY_STATUS] Error: failed to find task"); return; }
 		send_sig_info(SIGSTOP, SEND_SIG_PRIV, task);
 		put_task_struct(task);
 
@@ -252,7 +259,7 @@ static void lottery_monitor(struct work_struct *work) {
 			if(rand_ticket <= cpu2[i].tickets) {
 				pr_info("winner picked. rand_ticket %ld", rand_ticket);
 				pid = cpu2[i].pid;
-				if(currentProccess2) old_pid = currentProccess2->pid;
+				if(currentProccess2 != NULL) old_pid = currentProccess2->pid;
 				currentProccess2 = &cpu2[i];
 				break;
 			} else {
@@ -319,6 +326,7 @@ static int __init lottery_init(void) {
 }
 
 static void __exit lottery_exit(void) {
+	WRITE_ONCE(lottery_stopping, true);
 	// unregister dev on rmmod
 	hrtimer_cancel(&lottery_timer);
 	cancel_work_sync(&lottery_work);
