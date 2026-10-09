@@ -40,10 +40,13 @@ static struct lottery_struct cpu1[500];
 static struct lottery_struct currentProccess1;
 static int index1 = 0;
 static int weight1 = 0;
+static int in_use1 = FALSE;
+
 static struct lottery_struct cpu2[500];
 static struct lottery_struct currentProccess2;
 static int index2 = 0;
 static int weight2 = 0;
+static int in_use2 = FALSE;
 
 static struct pid *pid_struct;
 static struct task_struct *task;
@@ -65,7 +68,7 @@ static long lottery_ioctl(struct file *file, unsigned int cmd, unsigned long arg
 
 	switch(cmd) { 
 	case LOTTERY_REGISTER: // arg = struct lottery_struct lottery_info
-		
+
 		pr_info("weight1 %d > %d weight2\n index1 %d > %d index2", weight1, weight2, index1, index2);
 		if(copy_from_user(&process, (struct lottery_struct __user*)arg, sizeof(struct lottery_struct))) {
 			return -EFAULT;
@@ -99,6 +102,8 @@ static long lottery_ioctl(struct file *file, unsigned int cmd, unsigned long arg
 
 		int i;
 
+		// CPU 1
+		in_use1 = TRUE;
 		for (i = 0; i < index1; i++) {
 		  if (cpu1[i].pid == process.pid) {
 		  	found = TRUE;
@@ -119,7 +124,10 @@ static long lottery_ioctl(struct file *file, unsigned int cmd, unsigned long arg
 			currentProccess1.tickets = 0;
 			pr_info("[LOTTERY_STATUS] process %ld deregistered. index %d", process.pid, index2);
 		}
+		in_use1 = FALSE;
 
+		// CPU 2
+		in_use2 = TRUE;
 		for (i = 0; i < index2; i++) {
 		  if (cpu2[i].pid == process.pid) {
 		  	found = TRUE;
@@ -140,6 +148,7 @@ static long lottery_ioctl(struct file *file, unsigned int cmd, unsigned long arg
 			currentProccess2.tickets = 0;
 			pr_info("[LOTTERY_STATUS] process %ld deregistered. index %d", process.pid, index2);
 		}
+		in_use2 = FALSE;
 
 		if(!found) {
 			pr_err("[LOTTERY_STATUS]: Could not find process %ld in registry\n", process.pid);
@@ -217,7 +226,7 @@ static void lottery_monitor(struct work_struct *work) {
 	long pid = -1;
 	long old_pid = -1;
 	
-	if(index1 > 0) {
+	if(index1 > 0 && in_use1 == FALSE) {
 		get_random_bytes(&rand_ticket, sizeof(rand_ticket));
 		rand_ticket = (rand_ticket % weight1) + 1;
 		// pr_info("cpu2/rand_ticket = %ld", rand_ticket);
@@ -265,7 +274,7 @@ static void lottery_monitor(struct work_struct *work) {
 	pid = -1;
 	old_pid = -1;
 
-	if(index2 > 0) {
+	if(index2 > 0 && in_use2 == FALSE) {
 
 		get_random_bytes(&rand_ticket, sizeof(rand_ticket));
 		rand_ticket = (rand_ticket % weight2) + 1;
