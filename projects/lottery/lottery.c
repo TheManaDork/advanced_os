@@ -4,10 +4,21 @@
 #include <linux/fs.h>
 #include <linux/miscdevice.h>
 #include <linux/uaccess.h>
+
+
+#include <linux/version.h>
+#include <linux/sched.h>
+#include <linux/sched/signal.h>
+#include <linux/pid.h>
+#include <linux/hrtimer.h>
+#include <linux/workqueue.h>
 // #include <stdbool.h>
 #include "lottery.h"
 
 #define MISC_NAME "lottery"
+#define TIMER_INTERVAL_MS 500
+
+
 #define FALSE 0
 #define TRUE 1
 
@@ -24,11 +35,18 @@
 
 static int stored_value = 42;
 static struct lottery_struct cpu1[500];
+static struct lottery_struct *currentProccess1;
 static int index1 = 0;
 static int weight1 = 0;
 static struct lottery_struct cpu2[500];
+static struct lottery_struct *currentProccess2;
 static int index2 = 0;
 static int weight2 = 0;
+
+static struct pid *pid_struct;
+static struct task_struct *task;
+
+static int monitor_pid = -1;
 
 MODULE_LICENSE("GPL");
 MODULE_DESCRIPTION("Lottery kernel module");
@@ -41,8 +59,7 @@ static long lottery_ioctl(struct file *file, unsigned int cmd, unsigned long arg
 	int *weight;
 
 	switch(cmd) { 
-	case 1/*LOTTERY_REGISTER*/: // arg = struct lottery_struct lottery_info
-		pr_info("[LOTTERY_STATUS]; Process registering...\n");
+	case LOTTERY_REGISTER: // arg = struct lottery_struct lottery_info
 
 		if(copy_from_user(&process, (struct lottery_struct __user*)arg, sizeof(struct lottery_struct))) {
 			return -EFAULT;
@@ -56,6 +73,13 @@ static long lottery_ioctl(struct file *file, unsigned int cmd, unsigned long arg
 
 		(*weight) += cpuSlot->tickets; 
 		(*index)++;
+
+		pid_struct = find_get_pid(cpuSlot->pid);
+		task = get_pid_task(pid_struct, PIDTYPE_PID);
+		put_pid(pid_struct);
+		send_sig_info(SIGSTOP, SEND_SIG_PRIV, task);
+		put_task_struct(task);
+
 		pr_info("[LOTTERY_STATUS]: Process %ld registered\n", cpuSlot->pid);
 	break;
 	case LOTTERY_UNREGISTER: // arg = struct lottery_struct lottery_info
@@ -144,16 +168,62 @@ static struct miscdevice lottery_dev = {
 };
 
 
+
+// ================== Timer ============
+static struct hrtimer lottery_timer;
+static struct work_struct lottery_work;
+static ktime_t kt_interval;
+
+static enum hrtimer_restart lottery_timer_tick(struct hrtimer *timer) {
+	schedule_work(&lottery_work);
+	hrtimer_forward_now(timer, kt_interval);
+	return HRTIMER_RESTART;
+}
+
+
+static void lottery_monitor(struct work_struct *work) {
+	pr_info("[LOTTER_STATUS] running oldest pids\n");
+	
+	pid_struct = find_get_pid(cpu1[0]->pid);
+	task = get_pid_task(pid_struct, PIDTYPE_PID);
+	put_pid(pid_struct);
+	send_sig_info(SIGCONT, SEND_SIG_PRIV, task);
+	put_task_struct(task);
+
+	pid_struct = find_get_pid(cpu1[0]->pid);
+	task = get_pid_task(pid_struct, PIDTYPE_PID);
+	put_pid(pid_struct);
+	send_sig_info(SIGCONT, SEND_SIG_PRIV, task);
+	put_task_struct(task);
+
+	return;
+}
+
+
+
 static int __init lottery_init(void) {
 	// DEVICE INIT START
 	int reg = misc_register(&lottery_dev);
 	if(reg) {
 		pr_err("[LOTTERY_STATUS]: failed to register device /dev/%s (err=%d)\n", MISC_NAME, reg);
-		// return reg;
+		return reg;
 	}
 
 	pr_info("[LOTTERY_STATUS]: Device registered at /dev/%s\n", MISC_NAME);
 	// DEVICE INIT END
+
+	INIT_WORK(&lottery_work, lottery_monitor);
+	kt_interval = ktime_set(0, 500*NSEC_PER_MSEC);
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 14, 0)
+	hrtimer_setup(&lottery_timer, lottery_timer_tick, CLOCK_MONOTONIC, HRTIMER_MODE_REL);
+#else
+	hrtimer_init(&lottery_timer, CLOCK_MONOTONIC, HRTIMER_MODE_REL);
+	lottery_timer.function = lottery_timer_tick;
+#endif
+
+	pr_info("[LOTTER_STATUS] starting timer");
+	hrtimer_start(&lottery_timer, kt_interval, HRTIMER_MODE_REL);
+
 	return 0;
 }
 
