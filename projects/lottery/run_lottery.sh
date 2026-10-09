@@ -48,7 +48,7 @@ echo "Waiting 3 seconds for initial process registration to settle..."
 sleep 3
 
 # Clear registration logs so students only measure the steady-state execution
-dmesg -c > /dev/null
+# dmesg -c > /dev/null
 
 echo "--------------------------------------------------------"
 echo "Capturing Steady-State Load Balancing Metrics..."
