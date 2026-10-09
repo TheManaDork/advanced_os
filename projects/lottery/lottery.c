@@ -12,6 +12,8 @@
 #include <linux/pid.h>
 #include <linux/hrtimer.h>
 #include <linux/workqueue.h>
+
+#include <linux/random.h>
 // #include <stdbool.h>
 #include "lottery.h"
 
@@ -35,11 +37,11 @@
 
 static int stored_value = 42;
 static struct lottery_struct cpu1[500];
-static struct lottery_struct *currentProccess1;
+static struct lottery_struct *currentProccess1 = NULL;
 static int index1 = 0;
 static int weight1 = 0;
 static struct lottery_struct cpu2[500];
-static struct lottery_struct *currentProccess2;
+static struct lottery_struct *currentProccess2 = NULL;
 static int index2 = 0;
 static int weight2 = 0;
 
@@ -57,16 +59,16 @@ static long lottery_ioctl(struct file *file, unsigned int cmd, unsigned long arg
 	struct lottery_struct process;
 	int *index;
 	int *weight;
-
+	(void)currentProccess1; (void)currentProccess2; (void)monitor_pid;
 	switch(cmd) { 
 	case LOTTERY_REGISTER: // arg = struct lottery_struct lottery_info
-
+		pr_info("weight1 %d > %d weight2\n index1 %d > %d index2", weight1, weight2, index1, index2);
 		if(copy_from_user(&process, (struct lottery_struct __user*)arg, sizeof(struct lottery_struct))) {
 			return -EFAULT;
 		}
-		struct lottery_struct *cpuSlot = weight1>weight2 ? &cpu1[index1] : &cpu2[index2];
-		index = weight1>weight2 ? &index1 : &index2;
-		weight = weight1>weight2 ? &weight1 : &weight2;
+		struct lottery_struct *cpuSlot = weight1<weight2 ? &cpu1[index1] : &cpu2[index2];
+		index = weight1<weight2 ? &index1 : &index2;
+		weight = weight1<weight2 ? &weight1 : &weight2;
 
 		cpuSlot->pid = process.pid;
 		cpuSlot->tickets = process.tickets;
@@ -80,7 +82,7 @@ static long lottery_ioctl(struct file *file, unsigned int cmd, unsigned long arg
 		send_sig_info(SIGSTOP, SEND_SIG_PRIV, task);
 		put_task_struct(task);
 
-		pr_info("[LOTTERY_STATUS]: Process %ld registered\n", cpuSlot->pid);
+		pr_info("[LOTTERY_STATUS]: Process %ld registered. index %d, weight %d\n", cpuSlot->pid, (*index)-1, *weight);
 	break;
 	case LOTTERY_UNREGISTER: // arg = struct lottery_struct lottery_info
 
@@ -94,12 +96,14 @@ static long lottery_ioctl(struct file *file, unsigned int cmd, unsigned long arg
 				cpu1[i].pid = cpu1[i+1].pid;
 				cpu1[i].tickets = cpu1[i+1].tickets;
 			}
-			if(cpu1[i].pid == process.pid) {
+			if(!found && (cpu1[i].pid == process.pid)) {
 				found = TRUE;
-				index1--;
+				index1 -= 1;
 				weight1 -= cpu1[i].tickets;
 				cpu1[i].pid = cpu1[i+1].pid;
 				cpu1[i].tickets = cpu1[i+1].tickets;
+				pr_info("[LOTTERY_STATUS] process %ld deregistered. index %d", process.pid, index1);
+
 			}
 		}
 		if(found) break;
@@ -111,12 +115,14 @@ static long lottery_ioctl(struct file *file, unsigned int cmd, unsigned long arg
 			}
 			if(cpu2[i].pid == process.pid) {
 				found = TRUE;
-				index1--;
-				weight1 -= cpu2[i].tickets;
+				index2 -= 1;
+				weight2 -= cpu2[i].tickets;
 				cpu2[i].pid = cpu2[i+1].pid;
 				cpu2[i].tickets = cpu2[i+1].tickets;
+				pr_info("[LOTTERY_STATUS] process %ld deregistered. index %d", process.pid, index2);
 			}
 		}
+
 
 		if(!found) {
 			pr_err("[LOTTERY_STATUS]: Could not find process %ld in registry\n", process.pid);
@@ -182,19 +188,104 @@ static enum hrtimer_restart lottery_timer_tick(struct hrtimer *timer) {
 
 
 static void lottery_monitor(struct work_struct *work) {
-	pr_info("[LOTTER_STATUS] running oldest pids\n");
-	
-	pid_struct = find_get_pid(cpu1[0]->pid);
-	task = get_pid_task(pid_struct, PIDTYPE_PID);
-	put_pid(pid_struct);
-	send_sig_info(SIGCONT, SEND_SIG_PRIV, task);
-	put_task_struct(task);
+	pr_info("[LOTTERY_STATUS] running lottery. Weights are %d, %d\n", weight1, weight2);
 
-	pid_struct = find_get_pid(cpu1[0]->pid);
-	task = get_pid_task(pid_struct, PIDTYPE_PID);
-	put_pid(pid_struct);
-	send_sig_info(SIGCONT, SEND_SIG_PRIV, task);
-	put_task_struct(task);
+	unsigned long rand_ticket;
+	long pid = -1;
+	long old_pid = -1;
+	
+	if(index1 > 0) {
+		get_random_bytes(&rand_ticket, sizeof(rand_ticket));
+		rand_ticket = (rand_ticket % weight1) + 1;
+		pr_info("rand_ticket = %ld", rand_ticket);
+
+		for(int i = 0; i < index1; i++) {
+			pr_info("rand_ticket = %ld (- pid %ld)", rand_ticket, cpu1[i].pid);
+			if(rand_ticket <= cpu1[i].tickets) {
+				pr_info("winner picked. rand_ticket %ld", rand_ticket);
+				pid = cpu1[i].pid;
+				if(!currentProccess1) old_pid = currentProccess1->pid;
+				 currentProccess1 = &cpu1[i];
+				break;
+			} else {
+				rand_ticket -= cpu1[i].tickets;
+			}
+		}
+
+		// start winning process
+		pid_struct = find_get_pid(pid);
+		if(!pid_struct) { 
+			pr_err("[LOTTERY_STATUS] Error: failed to find pid %ld, index %d rand_ticket %ld", pid, index1, rand_ticket); 
+			return; 
+		}
+		task = get_pid_task(pid_struct, PIDTYPE_PID);
+		if(!task) { pr_err("[LOTTERY_STATUS] Error: failed to find task"); return; }
+		put_pid(pid_struct);
+		send_sig_info(SIGCONT, SEND_SIG_PRIV, task);
+		put_task_struct(task);
+
+		// stop the previously chosen process
+		if(old_pid == -1) return;
+		pid_struct = find_get_pid(old_pid);
+		if(!pid_struct) {
+			pr_err("LOTTERY_STATUS] Error: failed to find old process pid %ld", currentProccess1->pid);
+			return;
+		}
+		task = get_pid_task(pid_struct, PIDTYPE_PID);
+		if(!task) { pr_err("[LOTTERY_STATUS] Error: failed to find task"); return; }
+		put_pid(pid_struct);
+		send_sig_info(SIGSTOP, SEND_SIG_PRIV, task);
+		put_task_struct(task);
+
+	}
+
+	pid = -1;
+	old_pid = -1;
+
+	if(index2 > 0) {
+
+		get_random_bytes(&rand_ticket, sizeof(rand_ticket));
+		rand_ticket = (rand_ticket % weight2) + 1;
+
+		for(int i = 0; i < index2; i++) {
+			pr_info("rand_ticket = %ld (- pid %ld)", rand_ticket, cpu2[i].pid);
+			if(rand_ticket <= cpu2[i].tickets) {
+				pr_info("winner picked. rand_ticket %ld", rand_ticket);
+				pid = cpu2[i].pid;
+				if(currentProccess2) old_pid = currentProccess2->pid;
+				currentProccess2 = &cpu2[i];
+				break;
+			} else {
+				rand_ticket -= cpu2[i].tickets;
+			}
+		}
+
+		// start winning process
+		pid_struct = find_get_pid(pid);
+		if(!pid_struct) { 
+			pr_err("[LOTTERY_STATUS] Error: failed to find pid %ld, index %d", pid, index2); 
+			return;
+		}
+		task = get_pid_task(pid_struct, PIDTYPE_PID);
+		if(!task) { pr_err("[LOTTERY_STATUS] Error: failed to find task"); return; }
+		put_pid(pid_struct);
+		send_sig_info(SIGCONT, SEND_SIG_PRIV, task);
+		put_task_struct(task);
+
+		// stop previously chosen process
+		if(old_pid == -1) return;
+		pid_struct = find_get_pid(old_pid);
+		if(!pid_struct) {
+			pr_err("LOTTERY_STATUS] Error: failed to find old process pid %ld", old_pid);
+			return;
+		}
+		task = get_pid_task(pid_struct, PIDTYPE_PID);
+		if(!task) { pr_err("[LOTTERY_STATUS] Error: failed to find task"); return; }
+		put_pid(pid_struct);
+		send_sig_info(SIGSTOP, SEND_SIG_PRIV, task);
+		put_task_struct(task);
+	}
+
 
 	return;
 }
@@ -229,6 +320,9 @@ static int __init lottery_init(void) {
 
 static void __exit lottery_exit(void) {
 	// unregister dev on rmmod
+	hrtimer_cancel(&lottery_timer);
+	cancel_work_sync(&lottery_work);
+
 	misc_deregister(&lottery_dev);
 	pr_info("[LOTTERY_STATUS]: Device /dev/%s unregistered\n", MISC_NAME);
 }
