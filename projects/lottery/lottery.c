@@ -61,8 +61,11 @@ static long lottery_ioctl(struct file *file, unsigned int cmd, unsigned long arg
 	int *index;
 	int *weight;
 	(void)currentProccess1; (void)currentProccess2; (void)monitor_pid;
+
+
 	switch(cmd) { 
 	case LOTTERY_REGISTER: // arg = struct lottery_struct lottery_info
+		
 		pr_info("weight1 %d > %d weight2\n index1 %d > %d index2", weight1, weight2, index1, index2);
 		if(copy_from_user(&process, (struct lottery_struct __user*)arg, sizeof(struct lottery_struct))) {
 			return -EFAULT;
@@ -84,8 +87,11 @@ static long lottery_ioctl(struct file *file, unsigned int cmd, unsigned long arg
 		put_task_struct(task);
 
 		pr_info("[LOTTERY_STATUS]: Process %ld registered. index %d, weight %d\n", cpuSlot->pid, (*index)-1, *weight);
+
 	break;
 	case LOTTERY_UNREGISTER: // arg = struct lottery_struct lottery_info
+
+		int found = FALSE;
 
 		if(copy_from_user(&process, (struct lottery_struct __user*)arg, sizeof(struct lottery_struct))) {
 			return -EFAULT;
@@ -95,6 +101,7 @@ static long lottery_ioctl(struct file *file, unsigned int cmd, unsigned long arg
 
 		for (i = 0; i < index1; i++) {
 		  if (cpu1[i].pid == process.pid) {
+		  	found = TRUE;
 		    break;
 		  }
 		}
@@ -115,6 +122,7 @@ static long lottery_ioctl(struct file *file, unsigned int cmd, unsigned long arg
 
 		for (i = 0; i < index2; i++) {
 		  if (cpu2[i].pid == process.pid) {
+		  	found = TRUE;
 		    break;
 		  }
 		}
@@ -132,10 +140,6 @@ static long lottery_ioctl(struct file *file, unsigned int cmd, unsigned long arg
 			currentProccess2.tickets = 0;
 			pr_info("[LOTTERY_STATUS] process %ld deregistered. index %d", process.pid, index2);
 		}
-
-
-		}
-
 
 		if(!found) {
 			pr_err("[LOTTERY_STATUS]: Could not find process %ld in registry\n", process.pid);
