@@ -36,9 +36,9 @@
 // #define LOTTERY_UNREGISTER _IOW(LOTTERY_MAGIC, 2, struct lottery_struct)
 
 // 2 CPU's
-static cpumask_t cpuMasks;
-static uint cpuid1;
-static uint cpuid2;
+// static cpumask_t cpuMasks;
+// static uint cpuid1;
+// static uint cpuid2;
 
 static int stored_value = 42;
 static struct lottery_struct cpu1[500];
@@ -81,7 +81,7 @@ static long lottery_ioctl(struct file *file, unsigned int cmd, unsigned long arg
 		struct lottery_struct *cpuSlot = weight1<weight2 ? &cpu1[index1] : &cpu2[index2];
 		index = weight1<weight2 ? &index1 : &index2;
 		weight = weight1<weight2 ? &weight1 : &weight2;
-		uint cpuid = (weight1 < weight2) ? cpuid1 : cpuid2;
+		// uint cpuid = (weight1 < weight2) ? cpuid1 : cpuid2;
 		cpuSlot->pid = process.pid;
 		cpuSlot->tickets = process.tickets;
 
@@ -99,10 +99,10 @@ static long lottery_ioctl(struct file *file, unsigned int cmd, unsigned long arg
 		}
 		put_pid(pid_struct);
 
-		if (!cpu_online(cpuid) || !cpumask_test_cpu(cpuid, task->cpus_ptr)) {
-	    put_task_struct(task);
-	    return -EINVAL;
-		} 
+		// if (!cpu_online(cpuid) || !cpumask_test_cpu(cpuid, task->cpus_ptr)) {
+	    // put_task_struct(task);
+	    // return -EINVAL;
+		// } 
 		// if(set_cpus_allowed_ptr(task, cpumask_of(cpuid)) == 0) { 
 		// 	pr_info("assigned process to cpu");
 		// } else {
@@ -359,20 +359,21 @@ static int __init lottery_init(void) {
 	pr_info("[LOTTERY_STATUS]: Device registered at /dev/%s\n", MISC_NAME);
 
 	// find CPU's
-	cpumask_clear(&cpuMasks);
-	cpumask_set_cpu(0, &cpuMasks);
-	cpumask_set_cpu(1, &cpuMasks); 
+	// cpumask_clear(&cpuMasks);
+	// cpumask_set_cpu(0, &cpuMasks);
+	// cpumask_set_cpu(1, &cpuMasks); 
 
-	cpuid1 = cpumask_first(&cpuMasks);
-	if (cpuid1 >= nr_cpu_ids) {
-    pr_err("No CPUs in cpus mask\n");
-    return -EINVAL;
-	}
-	cpuid2 = cpumask_next(cpuid1, &cpuMasks);
-	if (cpuid2 >= nr_cpu_ids) {
-    pr_err("Only one CPU is in cpus mask\n");
-    return -EINVAL;
-}
+	// cpuid1 = cpumask_first(&cpuMasks);
+	// if (cpuid1 >= nr_cpu_ids) {
+    // pr_err("No CPUs in cpus mask\n");
+    // return -EINVAL;
+	// }
+	// cpuid2 = cpumask_next(cpuid1, &cpuMasks);
+	// if (cpuid2 >= nr_cpu_ids) {
+    // pr_err("Only one CPU is in cpus mask\n");
+    // return -EINVAL;
+	// }
+
 
 
 // init timer
