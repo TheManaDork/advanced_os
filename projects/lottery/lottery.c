@@ -89,17 +89,29 @@ static long lottery_ioctl(struct file *file, unsigned int cmd, unsigned long arg
 		(*index)++;
 
 		pid_struct = find_get_pid(cpuSlot->pid);
-		task = get_pid_task(pid_struct, PIDTYPE_PID);
-		put_pid(pid_struct);
-		if(set_cpus_allowed_ptr(task, cpumask_of(cpuid)) == 0) { 
-			pr_info("assigned process to cpu");
-		} else {
-			pr_err("cpu assignment failed");
+		if(!pid_struct) {
+			return -ESRCH;
 		}
+
+		task = get_pid_task(pid_struct, PIDTYPE_PID);
+		if(!task) {
+			return -ESRCH;
+		}
+		put_pid(pid_struct);
+
+		if (!cpu_online(cpuid) || !cpumask_test_cpu(cpuid, task->cpus_ptr)) {
+	    put_task_struct(task);
+	    return -EINVAL;
+		} 
+		// if(set_cpus_allowed_ptr(task, cpumask_of(cpuid)) == 0) { 
+		// 	pr_info("assigned process to cpu");
+		// } else {
+		// 	pr_err("cpu assignment failed");
+		// }
 		send_sig_info(SIGSTOP, SEND_SIG_PRIV, task);
 		put_task_struct(task);
 
-		// pr_info("[LOTTERY_STATUS]: Process %ld registered. index %d, weight %d\n", cpuSlot->pid, (*index)-1, *weight);
+		pr_info("[LOTTERY_STATUS]: Process %ld registered. index %d, weight %d\n", cpuSlot->pid, (*index)-1, *weight);
 
 	break;
 	case LOTTERY_UNREGISTER: // arg = struct lottery_struct lottery_info
