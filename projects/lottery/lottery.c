@@ -14,7 +14,9 @@
 #include <linux/workqueue.h>
 
 #include <linux/random.h>
-// #include <stdbool.h>
+#include <linux/cpumask.h>
+#include <linux/sched/task.h>
+
 #include "lottery.h"
 
 #define MISC_NAME "lottery"
@@ -34,6 +36,9 @@
 // #define LOTTERY_UNREGISTER _IOW(LOTTERY_MAGIC, 2, struct lottery_struct)
 
 // 2 CPU's
+static cpumask_t cpuMasks;
+static uint cpuid1;
+static uint cpuid2;
 
 static int stored_value = 42;
 static struct lottery_struct cpu1[500];
@@ -76,7 +81,7 @@ static long lottery_ioctl(struct file *file, unsigned int cmd, unsigned long arg
 		struct lottery_struct *cpuSlot = weight1<weight2 ? &cpu1[index1] : &cpu2[index2];
 		index = weight1<weight2 ? &index1 : &index2;
 		weight = weight1<weight2 ? &weight1 : &weight2;
-
+		uint cpuid = (weight1 < weight2) ? cpuid1 : cpuid2;
 		cpuSlot->pid = process.pid;
 		cpuSlot->tickets = process.tickets;
 
@@ -86,6 +91,11 @@ static long lottery_ioctl(struct file *file, unsigned int cmd, unsigned long arg
 		pid_struct = find_get_pid(cpuSlot->pid);
 		task = get_pid_task(pid_struct, PIDTYPE_PID);
 		put_pid(pid_struct);
+		if(set_cpus_allowed_ptr(task, cpumask_of(cpuid)) == 0) { 
+			pr_info("assigned process to cpu");
+		} else {
+			pr_err("cpu assignment failed");
+		}
 		send_sig_info(SIGSTOP, SEND_SIG_PRIV, task);
 		put_task_struct(task);
 
@@ -220,7 +230,7 @@ static void lottery_monitor(struct work_struct *work) {
 	if (READ_ONCE(lottery_stopping)) {
   	return;
   }
-	pr_info("[LOTTERY_STATUS] CPU0: %d tix (%d tasks) | CPU1: %d tix (%d tasks) |\n", weight1, index1-1, weight2, index2-1);
+	pr_info("[LOTTERY_STATUS] CPU0: %d tix (%d tasks) | CPU1: %d tix (%d tasks) |\n", weight1, index1, weight2, index2);
 
 	unsigned long rand_ticket;
 	long pid = -1;
@@ -257,17 +267,18 @@ static void lottery_monitor(struct work_struct *work) {
 			put_task_struct(task);
 
 			// stop the previously chosen process
-			if(old_pid == -1) return;
-			pid_struct = find_get_pid(old_pid);
-			if(!pid_struct) {
-				pr_err("LOTTERY_ERROR] Error: failed to find old process pid %ld", currentProccess1.pid);
-				return;
+			if(!(old_pid == -1) && !(old_pid == pid)) {
+				pid_struct = find_get_pid(old_pid);
+				if(!pid_struct) {
+					pr_err("LOTTERY_ERROR] Error: failed to find old process pid %ld", currentProccess1.pid);
+					return;
+				}
+				task = get_pid_task(pid_struct, PIDTYPE_PID);
+				put_pid(pid_struct);
+				if(!task) { pr_err("[LOTTERY_ERROR] Error: failed to find task"); return; }
+				// send_sig_info(SIGSTOP, SEND_SIG_PRIV, task);
+				put_task_struct(task);
 			}
-			task = get_pid_task(pid_struct, PIDTYPE_PID);
-			put_pid(pid_struct);
-			if(!task) { pr_err("[LOTTERY_ERROR] Error: failed to find task"); return; }
-			send_sig_info(SIGSTOP, SEND_SIG_PRIV, task);
-			put_task_struct(task);
 		}
 	}
 
@@ -303,19 +314,19 @@ static void lottery_monitor(struct work_struct *work) {
 			put_pid(pid_struct);
 			send_sig_info(SIGCONT, SEND_SIG_PRIV, task);
 			put_task_struct(task);
-
 			// stop previously chosen process
-			if(old_pid == -1) return;
-			pid_struct = find_get_pid(old_pid);
-			if(!pid_struct) {
-				pr_err("LOTTERY_ERROR] Error: failed to find old process pid %ld", old_pid);
-				return;
+			if(!(old_pid == -1) && !(old_pid == pid)) {
+				pid_struct = find_get_pid(old_pid);
+				if(!pid_struct) {
+					pr_err("LOTTERY_ERROR] Error: failed to find old process pid %ld", old_pid);
+					return;
+				}
+				task = get_pid_task(pid_struct, PIDTYPE_PID);
+				if(!task) { pr_err("[LOTTERY_ERROR] Error: failed to find task"); return; }
+				put_pid(pid_struct);
+				// send_sig_info(SIGSTOP, SEND_SIG_PRIV, task);
+				put_task_struct(task);
 			}
-			task = get_pid_task(pid_struct, PIDTYPE_PID);
-			if(!task) { pr_err("[LOTTERY_ERROR] Error: failed to find task"); return; }
-			put_pid(pid_struct);
-			send_sig_info(SIGSTOP, SEND_SIG_PRIV, task);
-			put_task_struct(task);
 		}
 	}
 
@@ -334,8 +345,25 @@ static int __init lottery_init(void) {
 	}
 
 	pr_info("[LOTTERY_STATUS]: Device registered at /dev/%s\n", MISC_NAME);
-	// DEVICE INIT END
 
+	// find CPU's
+	cpumask_clear(&cpuMasks);
+	cpumask_set_cpu(0, &cpuMasks);
+	cpumask_set_cpu(1, &cpuMasks); 
+
+	cpuid1 = cpumask_first(&cpuMasks);
+	if (cpuid1 >= nr_cpu_ids) {
+    pr_err("No CPUs in cpus mask\n");
+    return -EINVAL;
+	}
+	cpuid2 = cpumask_next(cpuid1, &cpuMasks);
+	if (cpuid2 >= nr_cpu_ids) {
+    pr_err("Only one CPU is in cpus mask\n");
+    return -EINVAL;
+}
+
+
+// init timer
 	INIT_WORK(&lottery_work, lottery_monitor);
 	kt_interval = ktime_set(0, 500*NSEC_PER_MSEC);
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 14, 0)
@@ -347,6 +375,8 @@ static int __init lottery_init(void) {
 
 	pr_info("[LOTTERY_INFO] starting timer");
 	hrtimer_start(&lottery_timer, kt_interval, HRTIMER_MODE_REL);
+
+	
 
 	return 0;
 }

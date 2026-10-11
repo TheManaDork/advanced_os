@@ -30,9 +30,9 @@ echo "========================================="
 echo ""
 
 PIDS=()
-# TICKETS=(10 10 10 10 10 30 30 30 30 30 60 60 60 60 60 100 100 150 150 200)
+TICKETS=(10 10 10 10 10 30 30 30 30 30 60 60 60 60 60 100 100 150 150 200)
 # TICKETS=(10 10 30 30 60 60 100 150 200)
-TICKETS=(10)
+# TICKETS=(10)
 
 echo "Spawning 20 processes..."
 
@@ -93,7 +93,7 @@ echo "========================================="
 echo " Cleaning Up Module"
 echo "========================================="
 
-dmesg -c > /dev/null
+# dmesg -c > /dev/null
 
 rmmod lottery
 echo "Done."

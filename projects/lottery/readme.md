@@ -1,0 +1,1 @@
+Note: As there is no autograding and the instructions don't specify this must run on submitty I'm assuming it only needs to run on my vm with a fixe 2 CPU's
