@@ -56,14 +56,19 @@ sudo dmesg
 
 - User-Space Output
 
-Successfully mapped base page at: 0x500000000000
+```plaintext
+test@test-vm:~/advanced_os/demos/cr2$ ./trigger
+Successfully mapped exact address at: 0x500000000000
 Triggering page fault at offset address: 0x500000000041
-Successfully read value: 0
-
+Successfully read value: 0 (Page is now mapped)
+```
 
 - Kernel Ring Buffer (sudo dmesg) Output
 
-[ 4125.891234] CR2_PROBE: MATCH FOUND! Target address caught in CR2 = 0x500000000041
+```plaintext
+[98043.235243] CR2_PROBE: Planted kprobe at 00000000e9cfbba7
+[98232.532333] CR2_PROBE: MATCH FOUND! Target address caught in CR2 = 0x500000000041
+```
 
 ### What This Proves
 
