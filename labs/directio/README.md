@@ -111,6 +111,14 @@ Create a table containing your measured results:
 | Buffered I/O, second run | | |
 | Direct I/O | | |
 
+On most computers, your second buffered I/O run should be faster than the direct I/O; however, it is possible that even your buffered I/O first run could be faster than the direct I/O run; and that's because of the following reason:
+
+Read-Ahead (Prefetching) vs. Zero Prefetching: 
+
+- Buffered I/O enables kernel read-ahead: Even when the cache is cold, the Linux kernel detects your sequential read pattern (--rw=read) and proactively prefetches large blocks of data into memory ahead of your read pointer.   
+
+- Direct I/O strictly disables read-ahead: By design, O_DIRECT (--direct=1) tells the kernel: "Do not prefetch anything; fetch only the exact bytes requested, synchronously, straight from the hardware." This kills streaming sequential performance.
+
 ## Step 6 — Clean Up
 
 Remove the test file:
