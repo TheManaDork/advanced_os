@@ -78,8 +78,6 @@ Your results will vary depending on your machine and system load.
 
 Run the same command a second time. Record the bandwidth and elapsed time again.
 
-The second run may be faster because the file data may now be cached in the Linux page cache.
-
 ## Step 4 — Measure Direct I/O Performance
 
 Now repeat the experiment using direct I/O by setting `--direct=1`:
@@ -127,7 +125,7 @@ Submit screenshots on Submitty demonstrating your results. Also submit a txt or 
 
 Your screenshot(s) must clearly show:
 
-- The commands used to benchmark buffered I/O and direct I/O. For buffered I/O, show the first run and second run - the second run should be much faster than the first run.
+- The commands used to benchmark buffered I/O and direct I/O. For buffered I/O, show the first run and second run.
 - The bandwidth and elapsed time reported by each command.
 
 Due Date: 10/29/2026, 11:59pm. Each lab has a maximum of 5 points. Late submissions will be accepted within 3 days after the deadline, with a 1-point penalty applied to the earned grade.
