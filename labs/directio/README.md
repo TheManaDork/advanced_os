@@ -78,15 +78,6 @@ Your results will vary depending on your machine and system load.
 
 Run the same command a second time. Record the bandwidth and elapsed time again.
 
-<<<<<<< HEAD
-=======
-The second run should be faster because the file data may now be cached in the Linux page cache. If you don't see this improvement, clear the page cache and run the command twice in a row. This command clears the page cache:
-
-```bash
-$ sudo sh -c 'echo 1 > /proc/sys/vm/drop_caches'
-```
-
->>>>>>> d7749be5c9835ba7551f621a264af58a07827e53
 ## Step 4 — Measure Direct I/O Performance
 
 Now repeat the experiment using direct I/O by setting `--direct=1`:
